@@ -1,34 +1,30 @@
 #include <iostream>
 #include <seastar/core/app-template.hh>
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/future-util.hh>
+#include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/net/api.hh>
-
-const char *canned_response = "Seastar is the future!\n";
+#include <seastar/util/later.hh>
 
 seastar::future<> handle_connection(seastar::connected_socket s,
                                     seastar::socket_address a) {
   auto out = s.output();
   auto in = s.input();
-  return do_with(
-      std::move(s), std::move(out), std::move(in),
-      [](auto &s, auto &out, auto &in) {
-        return seastar::repeat([&out, &in] {
-                 return in.read().then([&out](auto buf) {
-                   if (buf) {
-                     return out.write(std::move(buf))
-                         .then([&out] { return out.flush(); })
-                         .then([] { return seastar::stop_iteration::no; });
-                   } else {
-                     return seastar::make_ready_future<seastar::stop_iteration>(
-                         seastar::stop_iteration::yes);
-                   }
-                 });
-               })
-            .then([&out] { return out.close(); });
-      });
+  std::cout << "established connection" << std::endl;
+  while (true) {
+    std::cout << "entered looop" << std::endl;
+    auto buf = co_await in.read();
+    if (buf) {
+      co_await out.write(std::move(buf));
+      co_await out.flush();
+    } else {
+      std::cout << "done" << std::endl;
+      co_return;
+    }
+  }
 }
 
 seastar::future<> service_loop_3() {
